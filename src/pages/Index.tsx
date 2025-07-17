@@ -1,9 +1,8 @@
 import { useEffect } from 'react';
-import Navigation from '../components/Navigation';
 import HeroSection from '../components/HeroSection';
-import AboutSection from '../components/AboutSection';
-import ProjectsSection from '../components/ProjectsSection';
-import ContactSection from '../components/ContactSection';
+import PerformanceDashboard from '../components/PerformanceDashboard';
+import RaceTrackProjects from '../components/RaceTrackProjects';
+import PitStopContact from '../components/PitStopContact';
 import Footer from '../components/Footer';
 
 const Index = () => {
@@ -13,13 +12,12 @@ const Index = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Navigation />
+    <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
       <main>
         <HeroSection />
-        <AboutSection />
-        <ProjectsSection />
-        <ContactSection />
+        <PerformanceDashboard />
+        <RaceTrackProjects />
+        <PitStopContact />
       </main>
       <Footer />
     </div>
