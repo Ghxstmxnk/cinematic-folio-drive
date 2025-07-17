@@ -1,11 +1,11 @@
 import { useRef, useEffect, useState } from 'react';
-import { motion, useScroll, useTransform, useMotionValue, useAnimationFrame } from 'framer-motion';
+import { motion, useScroll, useTransform, useMotionValue } from 'framer-motion';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Float, OrbitControls, Environment } from '@react-three/drei';
 import { Mesh } from 'three';
 import { ArrowDown, Zap, Code, Rocket } from 'lucide-react';
-import ferrariCar from '../assets/ferrari-car.png';
-import cityBackground from '../assets/city-background.jpg';
+import SpeedLinesEffect from './SpeedLinesEffect';
+import RoadDustParticlesEffect from './RoadDustParticlesEffect';
 
 // 3D Speed Lines Effect
 function SpeedLines() {
@@ -187,7 +187,7 @@ export default function HeroSection() {
       >
         <div 
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: `url(${cityBackground})` }}
+          style={{ backgroundImage: `url(/src/assets/city-background.jpg)` }}
         />
         <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/50 to-background/90" />
         
@@ -250,7 +250,7 @@ export default function HeroSection() {
             }}
           >
             <motion.img
-              src={ferrariCar}
+              src="/src/assets/ferrari-car.png"
               alt="Ferrari"
               className="w-auto h-full object-contain"
               style={{ 
@@ -379,55 +379,10 @@ export default function HeroSection() {
           />
           
           {/* Speed lines when car is rolling */}
-          {isRolling && (
-            <motion.div
-              className="absolute bottom-12 left-20 flex space-x-2"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-            >
-              {Array.from({ length: 12 }, (_, i) => (
-                <motion.div
-                  key={i}
-                  className="w-1 bg-gradient-to-t from-primary/60 to-transparent"
-                  style={{
-                    height: useTransform(carVelocity, (value) => `${8 + value * 20}px`)
-                  }}
-                  animate={{
-                    x: [-50, -120],
-                    opacity: [0, 1, 0]
-                  }}
-                  transition={{
-                    duration: 0.2,
-                    repeat: Infinity,
-                    delay: i * 0.03
-                  }}
-                />
-              ))}
-            </motion.div>
-          )}
+          <SpeedLinesEffect isRolling={isRolling} carVelocity={carVelocity} />
           
           {/* Road dust particles */}
-          {isRolling && (
-            <motion.div className="absolute bottom-2 left-12">
-              {Array.from({ length: 6 }, (_, i) => (
-                <motion.div
-                  key={i}
-                  className="absolute w-1 h-1 bg-gray-400 rounded-full"
-                  animate={{
-                    x: [-10, -60],
-                    y: [0, -20, -10],
-                    opacity: [0, 0.8, 0],
-                    scale: [0.5, 1, 0.3]
-                  }}
-                  transition={{
-                    duration: 0.8,
-                    repeat: Infinity,
-                    delay: i * 0.1
-                  }}
-                />
-              ))}
-            </motion.div>
-          )}
+          <RoadDustParticlesEffect isRolling={isRolling} />
         </div>
       </motion.div>
 
