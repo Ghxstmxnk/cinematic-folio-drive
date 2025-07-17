@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
-import { motion, useScroll, useTransform, useSpring, useMotionValue, useAnimationFrame } from 'framer-motion';
+import { motion, useScroll, useTransform, useMotionValue, useAnimationFrame } from 'framer-motion';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Float, OrbitControls, Environment } from '@react-three/drei';
 import { Mesh } from 'three';
@@ -94,7 +94,7 @@ function ParticleSystem() {
 
 export default function HeroSection() {
   const heroRef = useRef<HTMLDivElement>(null);
-  const [carStarted, setCarStarted] = useState(false);
+  const [isRolling, setIsRolling] = useState(false);
   const [showStartButton, setShowStartButton] = useState(true);
   
   const { scrollYProgress } = useScroll({
@@ -102,10 +102,15 @@ export default function HeroSection() {
     offset: ["start start", "end start"]
   });
 
-  // Car driving animation states
+  // Car physics values
   const carPosition = useMotionValue(0);
-  const tireRotation = useMotionValue(0);
-  const engineSound = useMotionValue(0);
+  const carVelocity = useMotionValue(0);
+  const wheelRotation = useMotionValue(0);
+  const engineIntensity = useMotionValue(0);
+  
+  // Wheel physics constants
+  const WHEEL_RADIUS = 24; // pixels
+  const WHEEL_CIRCUMFERENCE = 2 * Math.PI * WHEEL_RADIUS;
   
   // Background parallax
   const bgY = useTransform(scrollYProgress, [0, 1], ['0%', '40%']);
@@ -116,40 +121,56 @@ export default function HeroSection() {
   const textScale = useTransform(scrollYProgress, [0, 0.6], [1, 0.7]);
   const textY = useTransform(scrollYProgress, [0, 0.6], ['0%', '-50%']);
 
-  // Start the car driving animation
-  const startCar = () => {
-    setCarStarted(true);
+  // Realistic car rolling physics
+  const startRolling = () => {
+    setIsRolling(true);
     setShowStartButton(false);
     
-    // Engine rev up sound effect (visual)
-    engineSound.set(1);
-    
-    // Car acceleration animation
     const startTime = Date.now();
+    const ACCELERATION = 0.0008; // pixels per ms²
+    const MAX_SPEED = 0.8; // pixels per ms
+    const ROLL_DURATION = 5000; // 5 seconds
+    
     const animate = () => {
       const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / 4000, 1); // 4 second animation
-      
-      // Realistic acceleration curve
-      const easeOut = 1 - Math.pow(1 - progress, 3);
-      const position = easeOut * 120; // Move 120% to the right (off screen)
-      
-      carPosition.set(position);
-      
-      // Tire rotation based on speed
-      const speed = position * 0.1;
-      tireRotation.set(tireRotation.get() + speed);
+      const progress = Math.min(elapsed / ROLL_DURATION, 1);
       
       if (progress < 1) {
+        // Realistic acceleration curve
+        let currentVelocity = Math.min(ACCELERATION * elapsed, MAX_SPEED);
+        
+        // Apply some deceleration near the end for realism
+        if (progress > 0.8) {
+          const decelerationFactor = 1 - ((progress - 0.8) / 0.2) * 0.3;
+          currentVelocity *= decelerationFactor;
+        }
+        
+        carVelocity.set(currentVelocity);
+        
+        // Update position based on velocity
+        const currentPosition = carPosition.get();
+        const newPosition = currentPosition + currentVelocity;
+        carPosition.set(newPosition);
+        
+        // Calculate wheel rotation based on distance traveled
+        // Each pixel moved = rotation in degrees
+        const rotationIncrement = (currentVelocity / WHEEL_CIRCUMFERENCE) * 360;
+        wheelRotation.set(wheelRotation.get() + rotationIncrement);
+        
+        // Engine intensity based on velocity
+        engineIntensity.set(Math.min(currentVelocity / MAX_SPEED, 1));
+        
         requestAnimationFrame(animate);
       } else {
-        // Car has driven off, show restart option after delay
+        // Car has finished rolling
         setTimeout(() => {
+          // Reset for next animation
           setShowStartButton(true);
-          setCarStarted(false);
+          setIsRolling(false);
           carPosition.set(0);
-          tireRotation.set(0);
-          engineSound.set(0);
+          carVelocity.set(0);
+          wheelRotation.set(0);
+          engineIntensity.set(0);
         }, 2000);
       }
     };
@@ -201,25 +222,25 @@ export default function HeroSection() {
         </Canvas>
       </div>
 
-      {/* Ferrari Car with Realistic Driving Animation */}
+      {/* Ferrari Car with Realistic Rolling Physics */}
       <motion.div
         style={{ 
-          x: useTransform(carPosition, (value) => `${value}%`),
+          x: useTransform(carPosition, (value) => `${value}px`),
         }}
-        className="absolute bottom-0 left-0 z-10 w-full h-full pointer-events-none"
+        className="absolute bottom-0 left-0 z-10 w-auto h-full pointer-events-none"
       >
-        <div className="relative w-full h-full">
-          {/* Main car body with engine vibration */}
+        <div className="relative w-auto h-full">
+          {/* Main car body with realistic engine vibration */}
           <motion.div
             className="absolute bottom-0 left-0 w-auto h-1/2"
-            animate={carStarted ? {
-              y: [0, -2, 0, -1, 0],
-              x: [0, 1, -1, 0]
+            animate={isRolling ? {
+              y: [0, -1, 0, -0.5, 0],
+              x: [0, 0.5, -0.5, 0]
             } : {
-              y: [0, -5, 0],
+              y: [0, -2, 0],
             }}
-            transition={carStarted ? { 
-              duration: 0.1, 
+            transition={isRolling ? { 
+              duration: 0.08, 
               repeat: Infinity,
               ease: "easeInOut"
             } : { 
@@ -233,146 +254,175 @@ export default function HeroSection() {
               alt="Ferrari"
               className="w-auto h-full object-contain"
               style={{ 
-                filter: carStarted 
-                  ? 'drop-shadow(0 0 35px rgba(220, 20, 60, 0.9)) brightness(1.1)'
-                  : 'drop-shadow(0 0 25px rgba(220, 20, 60, 0.6))',
+                filter: useTransform(engineIntensity, (value) => 
+                  `drop-shadow(0 0 ${25 + value * 20}px rgba(220, 20, 60, ${0.6 + value * 0.4})) brightness(${1 + value * 0.2})`
+                ),
               }}
-              animate={carStarted ? {
-                filter: [
-                  'drop-shadow(0 0 35px rgba(220, 20, 60, 0.9)) brightness(1.1)',
-                  'drop-shadow(0 0 45px rgba(220, 20, 60, 1)) brightness(1.2)',
-                  'drop-shadow(0 0 35px rgba(220, 20, 60, 0.9)) brightness(1.1)'
-                ]
-              } : {
-                filter: [
-                  'drop-shadow(0 0 25px rgba(220, 20, 60, 0.6))',
-                  'drop-shadow(0 0 35px rgba(220, 20, 60, 0.9))',
-                  'drop-shadow(0 0 25px rgba(220, 20, 60, 0.6))'
-                ]
-              }}
-              transition={{ duration: carStarted ? 0.2 : 2, repeat: Infinity }}
             />
           </motion.div>
           
-          {/* Front Tire with realistic rotation */}
+          {/* Front Wheel with Physics-Based Rotation */}
           <motion.div
-            className="absolute bottom-8 left-16 w-12 h-12 rounded-full border-4 border-gray-400 bg-gray-800"
-            style={{ rotate: useTransform(tireRotation, (value) => `${value * 2}deg`) }}
-            animate={carStarted ? {
-              boxShadow: [
-                '0 0 20px rgba(150, 150, 150, 0.8)',
-                '0 0 30px rgba(200, 200, 200, 1)',
-                '0 0 20px rgba(150, 150, 150, 0.8)'
-              ]
-            } : {
-              boxShadow: [
-                '0 0 10px rgba(100, 100, 100, 0.5)',
-                '0 0 20px rgba(150, 150, 150, 0.8)',
-                '0 0 10px rgba(100, 100, 100, 0.5)'
-              ]
+            className="absolute bottom-8 left-16 w-12 h-12 rounded-full border-4 border-gray-400 bg-gray-800 overflow-hidden"
+            style={{ 
+              rotate: useTransform(wheelRotation, (value) => `${value}deg`),
+              boxShadow: useTransform(engineIntensity, (value) => 
+                `0 0 ${10 + value * 20}px rgba(150, 150, 150, ${0.5 + value * 0.5})`
+              )
             }}
-            transition={{ duration: carStarted ? 0.1 : 1, repeat: Infinity }}
           >
-            {/* Tire spokes */}
-            <div className="absolute inset-2 rounded-full border-2 border-gray-500">
-              <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-500 transform -translate-y-0.5" />
-              <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-gray-500 transform -translate-x-0.5" />
-              <div className="absolute top-1/2 left-1/2 w-3 h-0.5 bg-gray-400 transform -translate-x-1/2 -translate-y-0.5 rotate-45" />
-              <div className="absolute top-1/2 left-1/2 w-3 h-0.5 bg-gray-400 transform -translate-x-1/2 -translate-y-0.5 -rotate-45" />
+            {/* Realistic tire tread pattern */}
+            <div className="absolute inset-1 rounded-full border-2 border-gray-500 bg-gray-700">
+              {/* Tire spokes */}
+              <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-300 transform -translate-y-0.5" />
+              <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-gray-300 transform -translate-x-0.5" />
+              <div className="absolute top-1/2 left-1/2 w-3 h-0.5 bg-gray-300 transform -translate-x-1/2 -translate-y-0.5 rotate-45" />
+              <div className="absolute top-1/2 left-1/2 w-3 h-0.5 bg-gray-300 transform -translate-x-1/2 -translate-y-0.5 -rotate-45" />
+              
+              {/* Center hub */}
+              <div className="absolute top-1/2 left-1/2 w-2 h-2 bg-gray-400 rounded-full transform -translate-x-1/2 -translate-y-1/2" />
             </div>
+            
+            {/* Tire tread marks */}
+            {Array.from({ length: 8 }, (_, i) => (
+              <div
+                key={i}
+                className="absolute w-0.5 h-1 bg-gray-600"
+                style={{
+                  top: '10%',
+                  left: '50%',
+                  transformOrigin: '50% 400%',
+                  transform: `translateX(-50%) rotate(${i * 45}deg)`
+                }}
+              />
+            ))}
           </motion.div>
           
-          {/* Rear Tire with realistic rotation */}
+          {/* Rear Wheel with Physics-Based Rotation */}
           <motion.div
-            className="absolute bottom-8 left-4 w-12 h-12 rounded-full border-4 border-gray-400 bg-gray-800"
-            style={{ rotate: useTransform(tireRotation, (value) => `${value * 2}deg`) }}
-            animate={carStarted ? {
-              boxShadow: [
-                '0 0 20px rgba(150, 150, 150, 0.8)',
-                '0 0 30px rgba(200, 200, 200, 1)',
-                '0 0 20px rgba(150, 150, 150, 0.8)'
-              ]
-            } : {
-              boxShadow: [
-                '0 0 10px rgba(100, 100, 100, 0.5)',
-                '0 0 20px rgba(150, 150, 150, 0.8)',
-                '0 0 10px rgba(100, 100, 100, 0.5)'
-              ]
+            className="absolute bottom-8 left-4 w-12 h-12 rounded-full border-4 border-gray-400 bg-gray-800 overflow-hidden"
+            style={{ 
+              rotate: useTransform(wheelRotation, (value) => `${value}deg`),
+              boxShadow: useTransform(engineIntensity, (value) => 
+                `0 0 ${10 + value * 20}px rgba(150, 150, 150, ${0.5 + value * 0.5})`
+              )
             }}
-            transition={{ duration: carStarted ? 0.1 : 1, repeat: Infinity }}
           >
-            {/* Tire spokes */}
-            <div className="absolute inset-2 rounded-full border-2 border-gray-500">
-              <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-500 transform -translate-y-0.5" />
-              <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-gray-500 transform -translate-x-0.5" />
-              <div className="absolute top-1/2 left-1/2 w-3 h-0.5 bg-gray-400 transform -translate-x-1/2 -translate-y-0.5 rotate-45" />
-              <div className="absolute top-1/2 left-1/2 w-3 h-0.5 bg-gray-400 transform -translate-x-1/2 -translate-y-0.5 -rotate-45" />
+            {/* Realistic tire tread pattern */}
+            <div className="absolute inset-1 rounded-full border-2 border-gray-500 bg-gray-700">
+              {/* Tire spokes */}
+              <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-300 transform -translate-y-0.5" />
+              <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-gray-300 transform -translate-x-0.5" />
+              <div className="absolute top-1/2 left-1/2 w-3 h-0.5 bg-gray-300 transform -translate-x-1/2 -translate-y-0.5 rotate-45" />
+              <div className="absolute top-1/2 left-1/2 w-3 h-0.5 bg-gray-300 transform -translate-x-1/2 -translate-y-0.5 -rotate-45" />
+              
+              {/* Center hub */}
+              <div className="absolute top-1/2 left-1/2 w-2 h-2 bg-gray-400 rounded-full transform -translate-x-1/2 -translate-y-1/2" />
             </div>
+            
+            {/* Tire tread marks */}
+            {Array.from({ length: 8 }, (_, i) => (
+              <div
+                key={i}
+                className="absolute w-0.5 h-1 bg-gray-600"
+                style={{
+                  top: '10%',
+                  left: '50%',
+                  transformOrigin: '50% 400%',
+                  transform: `translateX(-50%) rotate(${i * 45}deg)`
+                }}
+              />
+            ))}
           </motion.div>
           
-          {/* Enhanced Exhaust Effect - More intense when driving */}
+          {/* Enhanced Exhaust Effect - Intensity based on speed */}
           <motion.div
-            className="absolute bottom-16 left-8 w-24 h-3 bg-gradient-to-r from-transparent via-orange-500 to-transparent opacity-80 rounded-full"
-            animate={carStarted ? {
-              scaleX: [1, 3, 2.5, 3],
-              opacity: [0.8, 1, 0.9, 1],
-              x: [0, -20, -15, -25]
-            } : {
-              scaleX: [1, 1.8, 1],
-              opacity: [0.8, 0.3, 0.8],
-              x: [0, -10, 0]
+            className="absolute bottom-16 left-8 h-3 bg-gradient-to-r from-transparent via-orange-500 to-transparent opacity-80 rounded-full"
+            style={{
+              width: useTransform(engineIntensity, (value) => `${24 + value * 48}px`),
+              scaleX: useTransform(engineIntensity, (value) => 1 + value * 2),
+              opacity: useTransform(engineIntensity, (value) => 0.8 + value * 0.2),
+              x: useTransform(engineIntensity, (value) => -value * 30)
             }}
-            transition={{ duration: carStarted ? 0.1 : 0.4, repeat: Infinity }}
+            animate={isRolling ? {
+              scaleY: [1, 1.5, 1.2, 1.5],
+            } : {
+              scaleY: [1, 1.2, 1],
+            }}
+            transition={{ duration: isRolling ? 0.1 : 0.4, repeat: Infinity }}
           />
           
-          {/* Tire smoke effect - More intense when driving */}
+          {/* Tire smoke effect - More intense when rolling */}
           <motion.div
-            className="absolute bottom-4 left-8 w-20 h-8 bg-gradient-to-t from-gray-500/30 to-transparent rounded-full"
-            animate={carStarted ? {
-              scaleX: [1, 2.5, 2, 2.5],
-              scaleY: [1, 1.5, 1.2, 1.5],
-              opacity: [0.3, 0.8, 0.6, 0.8],
-              x: [0, -15, -10, -20]
-            } : {
-              scaleX: [1, 1.5, 1],
-              scaleY: [1, 0.8, 1],
-              opacity: [0.3, 0.1, 0.3]
+            className="absolute bottom-4 left-8 h-8 bg-gradient-to-t from-gray-500/30 to-transparent rounded-full"
+            style={{
+              width: useTransform(engineIntensity, (value) => `${20 + value * 40}px`),
+              scaleX: useTransform(engineIntensity, (value) => 1 + value * 2),
+              opacity: useTransform(engineIntensity, (value) => 0.3 + value * 0.5),
+              x: useTransform(engineIntensity, (value) => -value * 25)
             }}
-            transition={{ duration: carStarted ? 0.1 : 0.8, repeat: Infinity }}
+            animate={isRolling ? {
+              scaleY: [1, 1.8, 1.4, 1.8],
+            } : {
+              scaleY: [1, 0.8, 1],
+            }}
+            transition={{ duration: isRolling ? 0.1 : 0.8, repeat: Infinity }}
           />
           
           {/* Ground shadow - Dynamic based on movement */}
           <motion.div
             className="absolute bottom-0 left-0 w-32 h-4 bg-black/20 rounded-full blur-sm"
-            animate={carStarted ? {
-              scaleX: [1, 1.5, 1.3, 1.5],
-              opacity: [0.2, 0.6, 0.4, 0.6]
-            } : {
-              scaleX: [1, 1.2, 1],
-              opacity: [0.2, 0.4, 0.2]
+            style={{
+              scaleX: useTransform(engineIntensity, (value) => 1 + value * 0.5),
+              opacity: useTransform(engineIntensity, (value) => 0.2 + value * 0.4)
             }}
-            transition={{ duration: carStarted ? 0.2 : 2, repeat: Infinity }}
           />
           
-          {/* Speed lines when car is moving */}
-          {carStarted && (
+          {/* Speed lines when car is rolling */}
+          {isRolling && (
             <motion.div
               className="absolute bottom-12 left-20 flex space-x-2"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
             >
-              {Array.from({ length: 8 }, (_, i) => (
+              {Array.from({ length: 12 }, (_, i) => (
                 <motion.div
                   key={i}
-                  className="w-1 h-8 bg-gradient-to-t from-primary/60 to-transparent"
+                  className="w-1 bg-gradient-to-t from-primary/60 to-transparent"
+                  style={{
+                    height: useTransform(carVelocity, (value) => `${8 + value * 20}px`)
+                  }}
                   animate={{
-                    x: [-50, -100],
+                    x: [-50, -120],
                     opacity: [0, 1, 0]
                   }}
                   transition={{
-                    duration: 0.3,
+                    duration: 0.2,
                     repeat: Infinity,
-                    delay: i * 0.05
+                    delay: i * 0.03
+                  }}
+                />
+              ))}
+            </motion.div>
+          )}
+          
+          {/* Road dust particles */}
+          {isRolling && (
+            <motion.div className="absolute bottom-2 left-12">
+              {Array.from({ length: 6 }, (_, i) => (
+                <motion.div
+                  key={i}
+                  className="absolute w-1 h-1 bg-gray-400 rounded-full"
+                  animate={{
+                    x: [-10, -60],
+                    y: [0, -20, -10],
+                    opacity: [0, 0.8, 0],
+                    scale: [0.5, 1, 0.3]
+                  }}
+                  transition={{
+                    duration: 0.8,
+                    repeat: Infinity,
+                    delay: i * 0.1
                   }}
                 />
               ))}
@@ -444,10 +494,10 @@ export default function HeroSection() {
               View Projects
             </motion.button>
             
-            {/* Start Engine Button */}
+            {/* Start Rolling Button */}
             {showStartButton && (
               <motion.button
-                onClick={startCar}
+                onClick={startRolling}
                 whileHover={{ 
                   scale: 1.05, 
                   backgroundColor: "hsl(var(--accent))",
@@ -461,7 +511,7 @@ export default function HeroSection() {
                 transition={{ delay: 1, duration: 0.5 }}
               >
                 <Rocket size={20} />
-                {carStarted ? 'Driving...' : 'Start Engine'}
+                {isRolling ? 'Rolling...' : 'Start Rolling'}
               </motion.button>
             )}
           </motion.div>
