@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { motion, useScroll, useTransform, useSpring, useMotionValue, useAnimationFrame } from 'framer-motion';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Float, Text3D, OrbitControls, Environment, useGLTF } from '@react-three/drei';
+import { Float, OrbitControls, Environment } from '@react-three/drei';
 import { Mesh } from 'three';
 import { ArrowDown, Zap, Code, Rocket } from 'lucide-react';
 import ferrariCar from '../assets/ferrari-car.png';
@@ -94,39 +94,68 @@ function ParticleSystem() {
 
 export default function HeroSection() {
   const heroRef = useRef<HTMLDivElement>(null);
+  const [carStarted, setCarStarted] = useState(false);
+  const [showStartButton, setShowStartButton] = useState(true);
+  
   const { scrollYProgress } = useScroll({
     target: heroRef,
     offset: ["start start", "end start"]
   });
 
-  // Enhanced car movement with realistic physics
-  const carX = useTransform(scrollYProgress, [0, 1], ['0%', '120%']);
-  const carRotate = useTransform(scrollYProgress, [0, 1], [0, 8]);
-  const carScale = useTransform(scrollYProgress, [0, 1], [1, 0.7]);
-  const carY = useTransform(scrollYProgress, [0, 1], ['0%', '-10%']);
+  // Car driving animation states
+  const carPosition = useMotionValue(0);
+  const tireRotation = useMotionValue(0);
+  const engineSound = useMotionValue(0);
   
-  // Background parallax with depth
+  // Background parallax
   const bgY = useTransform(scrollYProgress, [0, 1], ['0%', '40%']);
   const bgScale = useTransform(scrollYProgress, [0, 1], [1, 1.1]);
   
-  // Smooth spring animations for realistic movement
-  const smoothCarX = useSpring(carX, { stiffness: 80, damping: 25 });
-  const smoothCarRotate = useSpring(carRotate, { stiffness: 100, damping: 30 });
-  const smoothCarY = useSpring(carY, { stiffness: 90, damping: 28 });
-
-  // Dynamic text animations with scroll
+  // Text animations
   const textOpacity = useTransform(scrollYProgress, [0, 0.6], [1, 0]);
   const textScale = useTransform(scrollYProgress, [0, 0.6], [1, 0.7]);
   const textY = useTransform(scrollYProgress, [0, 0.6], ['0%', '-50%']);
 
-  // Tire rotation animation
-  const tireRotation = useMotionValue(0);
-  
-  useAnimationFrame(() => {
-    const currentX = smoothCarX.get();
-    const speed = parseFloat(currentX.replace('%', '')) / 100;
-    tireRotation.set(tireRotation.get() + speed * 10);
-  });
+  // Start the car driving animation
+  const startCar = () => {
+    setCarStarted(true);
+    setShowStartButton(false);
+    
+    // Engine rev up sound effect (visual)
+    engineSound.set(1);
+    
+    // Car acceleration animation
+    const startTime = Date.now();
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / 4000, 1); // 4 second animation
+      
+      // Realistic acceleration curve
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      const position = easeOut * 120; // Move 120% to the right (off screen)
+      
+      carPosition.set(position);
+      
+      // Tire rotation based on speed
+      const speed = position * 0.1;
+      tireRotation.set(tireRotation.get() + speed);
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        // Car has driven off, show restart option after delay
+        setTimeout(() => {
+          setShowStartButton(true);
+          setCarStarted(false);
+          carPosition.set(0);
+          tireRotation.set(0);
+          engineSound.set(0);
+        }, 2000);
+      }
+    };
+    
+    requestAnimationFrame(animate);
+  };
 
   return (
     <section ref={heroRef} className="relative h-screen w-full overflow-hidden">
@@ -172,114 +201,183 @@ export default function HeroSection() {
         </Canvas>
       </div>
 
-      {/* Enhanced Ferrari Car with 3D Rolling Effect */}
+      {/* Ferrari Car with Realistic Driving Animation */}
       <motion.div
         style={{ 
-          x: smoothCarX,
-          y: smoothCarY,
-          rotate: smoothCarRotate,
-          scale: carScale
+          x: useTransform(carPosition, (value) => `${value}%`),
         }}
         className="absolute bottom-0 left-0 z-10 w-full h-full pointer-events-none"
       >
         <div className="relative w-full h-full">
-          {/* Main car body */}
+          {/* Main car body with engine vibration */}
           <motion.div
             className="absolute bottom-0 left-0 w-auto h-1/2"
-            animate={{
+            animate={carStarted ? {
+              y: [0, -2, 0, -1, 0],
+              x: [0, 1, -1, 0]
+            } : {
               y: [0, -5, 0],
             }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            transition={carStarted ? { 
+              duration: 0.1, 
+              repeat: Infinity,
+              ease: "easeInOut"
+            } : { 
+              duration: 2, 
+              repeat: Infinity, 
+              ease: "easeInOut" 
+            }}
           >
             <motion.img
               src={ferrariCar}
               alt="Ferrari"
               className="w-auto h-full object-contain"
               style={{ 
-                filter: 'drop-shadow(0 0 25px rgba(220, 20, 60, 0.6))',
+                filter: carStarted 
+                  ? 'drop-shadow(0 0 35px rgba(220, 20, 60, 0.9)) brightness(1.1)'
+                  : 'drop-shadow(0 0 25px rgba(220, 20, 60, 0.6))',
               }}
-              animate={{
+              animate={carStarted ? {
+                filter: [
+                  'drop-shadow(0 0 35px rgba(220, 20, 60, 0.9)) brightness(1.1)',
+                  'drop-shadow(0 0 45px rgba(220, 20, 60, 1)) brightness(1.2)',
+                  'drop-shadow(0 0 35px rgba(220, 20, 60, 0.9)) brightness(1.1)'
+                ]
+              } : {
                 filter: [
                   'drop-shadow(0 0 25px rgba(220, 20, 60, 0.6))',
                   'drop-shadow(0 0 35px rgba(220, 20, 60, 0.9))',
                   'drop-shadow(0 0 25px rgba(220, 20, 60, 0.6))'
                 ]
               }}
-              transition={{ duration: 2, repeat: Infinity }}
+              transition={{ duration: carStarted ? 0.2 : 2, repeat: Infinity }}
             />
           </motion.div>
           
-          {/* Front Tire */}
+          {/* Front Tire with realistic rotation */}
           <motion.div
             className="absolute bottom-8 left-16 w-12 h-12 rounded-full border-4 border-gray-400 bg-gray-800"
-            style={{ rotate: tireRotation }}
-            animate={{
+            style={{ rotate: useTransform(tireRotation, (value) => `${value * 2}deg`) }}
+            animate={carStarted ? {
+              boxShadow: [
+                '0 0 20px rgba(150, 150, 150, 0.8)',
+                '0 0 30px rgba(200, 200, 200, 1)',
+                '0 0 20px rgba(150, 150, 150, 0.8)'
+              ]
+            } : {
               boxShadow: [
                 '0 0 10px rgba(100, 100, 100, 0.5)',
                 '0 0 20px rgba(150, 150, 150, 0.8)',
                 '0 0 10px rgba(100, 100, 100, 0.5)'
               ]
             }}
-            transition={{ duration: 1, repeat: Infinity }}
+            transition={{ duration: carStarted ? 0.1 : 1, repeat: Infinity }}
           >
             {/* Tire spokes */}
             <div className="absolute inset-2 rounded-full border-2 border-gray-500">
               <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-500 transform -translate-y-0.5" />
               <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-gray-500 transform -translate-x-0.5" />
+              <div className="absolute top-1/2 left-1/2 w-3 h-0.5 bg-gray-400 transform -translate-x-1/2 -translate-y-0.5 rotate-45" />
+              <div className="absolute top-1/2 left-1/2 w-3 h-0.5 bg-gray-400 transform -translate-x-1/2 -translate-y-0.5 -rotate-45" />
             </div>
           </motion.div>
           
-          {/* Rear Tire */}
+          {/* Rear Tire with realistic rotation */}
           <motion.div
             className="absolute bottom-8 left-4 w-12 h-12 rounded-full border-4 border-gray-400 bg-gray-800"
-            style={{ rotate: tireRotation }}
-            animate={{
+            style={{ rotate: useTransform(tireRotation, (value) => `${value * 2}deg`) }}
+            animate={carStarted ? {
+              boxShadow: [
+                '0 0 20px rgba(150, 150, 150, 0.8)',
+                '0 0 30px rgba(200, 200, 200, 1)',
+                '0 0 20px rgba(150, 150, 150, 0.8)'
+              ]
+            } : {
               boxShadow: [
                 '0 0 10px rgba(100, 100, 100, 0.5)',
                 '0 0 20px rgba(150, 150, 150, 0.8)',
                 '0 0 10px rgba(100, 100, 100, 0.5)'
               ]
             }}
-            transition={{ duration: 1, repeat: Infinity }}
+            transition={{ duration: carStarted ? 0.1 : 1, repeat: Infinity }}
           >
             {/* Tire spokes */}
             <div className="absolute inset-2 rounded-full border-2 border-gray-500">
               <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-500 transform -translate-y-0.5" />
               <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-gray-500 transform -translate-x-0.5" />
+              <div className="absolute top-1/2 left-1/2 w-3 h-0.5 bg-gray-400 transform -translate-x-1/2 -translate-y-0.5 rotate-45" />
+              <div className="absolute top-1/2 left-1/2 w-3 h-0.5 bg-gray-400 transform -translate-x-1/2 -translate-y-0.5 -rotate-45" />
             </div>
           </motion.div>
           
-          {/* Enhanced Exhaust Effect */}
+          {/* Enhanced Exhaust Effect - More intense when driving */}
           <motion.div
             className="absolute bottom-16 left-8 w-24 h-3 bg-gradient-to-r from-transparent via-orange-500 to-transparent opacity-80 rounded-full"
-            animate={{
+            animate={carStarted ? {
+              scaleX: [1, 3, 2.5, 3],
+              opacity: [0.8, 1, 0.9, 1],
+              x: [0, -20, -15, -25]
+            } : {
               scaleX: [1, 1.8, 1],
               opacity: [0.8, 0.3, 0.8],
               x: [0, -10, 0]
             }}
-            transition={{ duration: 0.4, repeat: Infinity }}
+            transition={{ duration: carStarted ? 0.1 : 0.4, repeat: Infinity }}
           />
           
-          {/* Tire smoke effect */}
+          {/* Tire smoke effect - More intense when driving */}
           <motion.div
             className="absolute bottom-4 left-8 w-20 h-8 bg-gradient-to-t from-gray-500/30 to-transparent rounded-full"
-            animate={{
+            animate={carStarted ? {
+              scaleX: [1, 2.5, 2, 2.5],
+              scaleY: [1, 1.5, 1.2, 1.5],
+              opacity: [0.3, 0.8, 0.6, 0.8],
+              x: [0, -15, -10, -20]
+            } : {
               scaleX: [1, 1.5, 1],
               scaleY: [1, 0.8, 1],
               opacity: [0.3, 0.1, 0.3]
             }}
-            transition={{ duration: 0.8, repeat: Infinity }}
+            transition={{ duration: carStarted ? 0.1 : 0.8, repeat: Infinity }}
           />
           
-          {/* Ground shadow */}
+          {/* Ground shadow - Dynamic based on movement */}
           <motion.div
             className="absolute bottom-0 left-0 w-32 h-4 bg-black/20 rounded-full blur-sm"
-            animate={{
+            animate={carStarted ? {
+              scaleX: [1, 1.5, 1.3, 1.5],
+              opacity: [0.2, 0.6, 0.4, 0.6]
+            } : {
               scaleX: [1, 1.2, 1],
               opacity: [0.2, 0.4, 0.2]
             }}
-            transition={{ duration: 2, repeat: Infinity }}
+            transition={{ duration: carStarted ? 0.2 : 2, repeat: Infinity }}
           />
+          
+          {/* Speed lines when car is moving */}
+          {carStarted && (
+            <motion.div
+              className="absolute bottom-12 left-20 flex space-x-2"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+            >
+              {Array.from({ length: 8 }, (_, i) => (
+                <motion.div
+                  key={i}
+                  className="w-1 h-8 bg-gradient-to-t from-primary/60 to-transparent"
+                  animate={{
+                    x: [-50, -100],
+                    opacity: [0, 1, 0]
+                  }}
+                  transition={{
+                    duration: 0.3,
+                    repeat: Infinity,
+                    delay: i * 0.05
+                  }}
+                />
+              ))}
+            </motion.div>
+          )}
         </div>
       </motion.div>
 
@@ -345,23 +443,32 @@ export default function HeroSection() {
               <Code size={20} />
               View Projects
             </motion.button>
-            <motion.button
-              whileHover={{ 
-                scale: 1.05, 
-                backgroundColor: "hsl(var(--muted))",
-                y: -2
-              }}
-              whileTap={{ scale: 0.95 }}
-              className="px-8 py-4 bg-secondary text-secondary-foreground font-semibold rounded-lg border border-border transition-all duration-300 flex items-center gap-3"
-            >
-              <Rocket size={20} />
-              Start Engine
-            </motion.button>
+            
+            {/* Start Engine Button */}
+            {showStartButton && (
+              <motion.button
+                onClick={startCar}
+                whileHover={{ 
+                  scale: 1.05, 
+                  backgroundColor: "hsl(var(--accent))",
+                  color: "hsl(var(--accent-foreground))",
+                  y: -2
+                }}
+                whileTap={{ scale: 0.95 }}
+                className="px-8 py-4 bg-secondary text-secondary-foreground font-semibold rounded-lg border border-border transition-all duration-300 flex items-center gap-3"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 1, duration: 0.5 }}
+              >
+                <Rocket size={20} />
+                {carStarted ? 'Driving...' : 'Start Engine'}
+              </motion.button>
+            )}
           </motion.div>
         </motion.div>
       </div>
 
-      {/* Enhanced scroll indicator with speedometer style */}
+      {/* Enhanced scroll indicator */}
       <motion.div 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
